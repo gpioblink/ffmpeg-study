@@ -42,6 +42,18 @@ typedef struct VPXRangeCoder {
     int end_reached;
 } VPXRangeCoder;
 
+typedef struct VPXRangeEncoder {
+    int range;
+
+    int bits;
+    uint8_t *buffer;
+    uint8_t *end;
+    unsigned int code_word;
+
+    int c0;
+    int c1;
+} VPXRangeEncoder;
+
 extern const uint8_t ff_vpx_norm_shift[256];
 int ff_vpx_init_range_decoder(VPXRangeCoder *c, const uint8_t *buf, int buf_size);
 
@@ -76,13 +88,15 @@ static av_always_inline int vpx_rac_is_end(VPXRangeCoder *c)
 static av_always_inline unsigned int vpx_rac_renorm(VPXRangeCoder *c)
 {
     print_vpx_range_coder(c, "renorm");
-    int shift = ff_vpx_norm_shift[c->high]; // log2(high)
+    int shift = ff_vpx_norm_shift[c->high];
     int bits = c->bits;
     unsigned int code_word = c->code_word;
 
+    if(shift >0) printf("shift=%d, before code_word=0x%x\n", shift, code_word);
     c->high   <<= shift; // high = high * 2^shift
     code_word <<= shift; // code_word = code_word * 2^shift
     bits       += shift; // (default: -16)
+    if(shift >0) printf("shift=%d, after  code_word=0x%x\n", shift, code_word);
     if(bits >= 0 && c->buffer < c->end) { // buffer is not empty
         code_word |= bytestream_get_be16(&c->buffer) << bits; // code_word = code_word + (buffer << bits)
         bits -= 16;
@@ -121,8 +135,9 @@ static av_always_inline int vpx_rac_get_prob_branchy(VPXRangeCoder *c, int prob)
     unsigned long code_word = vpx_rac_renorm(c);
     unsigned low = 1 + (((c->high - 1) * prob) >> 8);
     unsigned low_shift = low << 16;
-
+    printf("low=%d low_shift=0x%x\n", low, low_shift);
     if (code_word >= low_shift) {
+        printf("code_word >= low_shift !!\n");
         c->high     -= low;
         c->code_word = code_word - low_shift;
         return 1;
@@ -153,5 +168,52 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
     print_vpx_range_coder(c, "rac_get end");
     return bit;
 }
+
+// static av_always_inline void vpx_rac_renorm_enc(VPXRangeCoder *c, int bit)
+// {
+//     // if the range is too small, renormalize
+//     while (c->high < 0x8000) {
+//         c->high <<= 1;
+//         c->code_word <<= 1;
+//         c->bits++;
+//         // if code_word exceeds 16 bits, store in buffer
+//         if (c->bits >= 0 && c->buffer < c->end) {
+//             bytestream_put_be16(&c->buffer, c->code_word >> 16);
+//             c->bits -= 16;
+//         }
+//     }
+// }
+
+// update prob for encoding
+static av_always_inline unsigned int vpx_rac_update_prob(VPXRangeEncoder *c, int bit)
+{
+    if (bit) {
+        c->c0 += 1;
+    } else {
+        c->c1 += 1;
+    }
+
+    // when the number of encoded bits becomes large, halve the number.
+    if (c->c0 + c->c1 > 0xFFFF) {
+        c->c0 = (c->c0 >> 1) | 1;
+        c->c1 = (c->c1 >> 1) | 1;
+    }
+}
+
+// static av_always_inline void vpx_rac_set(VPXRangeEncoder *c, int bit)
+// {
+//     /* equiprobable */
+//     int low = (c->high + 1) >> 1;
+//     unsigned int low_shift = low << 16;
+
+//     if (bit) {
+//         c->high   -= low;
+//         c->code_word -= low_shift;
+//     } else {
+//         c->high = low;
+//     }
+
+//     vpx_rac_update(c, bit);
+// }
 
 #endif /* AVCODEC_VPX_RAC_H */
