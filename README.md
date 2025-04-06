@@ -1,3 +1,9 @@
+```
+gcc -o test_rac ./test_rac.c -I. && ./test_rac && rm test_rac
+```
+
+---
+
 FFmpeg README
 =============
 

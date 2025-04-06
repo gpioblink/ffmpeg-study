@@ -45,6 +45,24 @@ typedef struct VPXRangeCoder {
 extern const uint8_t ff_vpx_norm_shift[256];
 int ff_vpx_init_range_decoder(VPXRangeCoder *c, const uint8_t *buf, int buf_size);
 
+
+static av_always_inline int dump_buffer(VPXRangeCoder *c)
+{
+    printf("buffer: ");
+    for (const uint8_t *p = c->buffer; p < c->end; p++)
+        printf("%02x ", *p);
+    printf("\n");
+    return 0;
+}
+
+static av_always_inline int print_vpx_range_coder(VPXRangeCoder *c, char *text)
+{
+    printf("%s: high=%d bits=%d code_word=0x%x\n",
+           text, c->high, c->bits, c->code_word);
+    dump_buffer(c);
+    return 0;
+}
+
 /**
  * returns 1 if the end of the stream has been reached, 0 otherwise.
  */
@@ -57,19 +75,21 @@ static av_always_inline int vpx_rac_is_end(VPXRangeCoder *c)
 
 static av_always_inline unsigned int vpx_rac_renorm(VPXRangeCoder *c)
 {
-    int shift = ff_vpx_norm_shift[c->high];
+    print_vpx_range_coder(c, "renorm");
+    int shift = ff_vpx_norm_shift[c->high]; // log2(high)
     int bits = c->bits;
     unsigned int code_word = c->code_word;
 
-    c->high   <<= shift;
-    code_word <<= shift;
-    bits       += shift;
-    if(bits >= 0 && c->buffer < c->end) {
-        code_word |= bytestream_get_be16(&c->buffer) << bits;
+    c->high   <<= shift; // high = high * 2^shift
+    code_word <<= shift; // code_word = code_word * 2^shift
+    bits       += shift; // (default: -16)
+    if(bits >= 0 && c->buffer < c->end) { // buffer is not empty
+        code_word |= bytestream_get_be16(&c->buffer) << bits; // code_word = code_word + (buffer << bits)
         bits -= 16;
     }
-    c->bits = bits;
-    return code_word;
+    c->bits = bits; // store the number of bits left
+    print_vpx_range_coder(c, "renend");
+    return code_word; // return the new code_word (internal state of the range coder)
 }
 
 #if   ARCH_ARM
@@ -121,6 +141,7 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
     int low = (c->high + 1) >> 1;
     unsigned int low_shift = low << 16;
     int bit = code_word >= low_shift;
+    printf("code_word=0x%x low=%d low_shift=0x%x bit=%d\n", code_word, low, low_shift, bit);
     if (bit) {
         c->high   -= low;
         code_word -= low_shift;
@@ -129,6 +150,7 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
     }
 
     c->code_word = code_word;
+    print_vpx_range_coder(c, "rac_get end");
     return bit;
 }
 
