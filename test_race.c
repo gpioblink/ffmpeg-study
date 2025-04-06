@@ -17,7 +17,7 @@ int main() {
   for (int i = 0; i < input_size; i++) {;
       printf("Encoding byte: 0x%x\n", input[i]);
       vpx_rac_put_prob(&coder, (input[i] >> 7) & 1, 204);
-      vpx_rac_put_prob(&coder, (input[i] >> 2) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 6) & 1, 204);
       vpx_rac_put_prob(&coder, (input[i] >> 5) & 1, 204);
       vpx_rac_put_prob(&coder, (input[i] >> 4) & 1, 204);
       vpx_rac_put_prob(&coder, (input[i] >> 3) & 1, 204);
