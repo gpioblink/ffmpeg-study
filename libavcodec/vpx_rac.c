@@ -51,3 +51,18 @@ int ff_vpx_init_range_decoder(VPXRangeCoder *c, const uint8_t *buf, int buf_size
     c->code_word = bytestream_get_be24(&c->buffer);
     return 0;
 }
+
+int ff_vpx_init_range_encoder(VPXRangeEncoder *c, uint8_t *buf, int buf_size)
+{
+    c->high = 255;
+    c->range = 255;
+    c->bits = -16;
+    c->buffer = buf;
+    c->end = buf + buf_size;
+    if (buf_size < 1)
+        return AVERROR_INVALIDDATA;
+    c->code_word = 0;
+    c->c0 = 0;
+    c->c1 = 0;
+    return 0;
+}

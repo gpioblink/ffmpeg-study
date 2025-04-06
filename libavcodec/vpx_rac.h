@@ -170,20 +170,28 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
     return bit;
 }
 
-// static av_always_inline void vpx_rac_renorm_enc(VPXRangeCoder *c, int bit)
-// {
-//     // if the range is too small, renormalize
-//     while (c->high < 0x8000) {
-//         c->high <<= 1;
-//         c->code_word <<= 1;
-//         c->bits++;
-//         // if code_word exceeds 16 bits, store in buffer
-//         if (c->bits >= 0 && c->buffer < c->end) {
-//             bytestream_put_be16(&c->buffer, c->code_word >> 16);
-//             c->bits -= 16;
-//         }
-//     }
-// }
+static av_always_inline void vpx_rac_renorm_enc(VPXRangeEncoder *c)
+{
+    int shift = ff_vpx_norm_shift[c->range];
+    int bits = c->bits;
+
+    int insert = c->high >> 8-shift;
+
+    c->code_word = (c->code_word << shift) + insert; // highの上位shiftbitをcode_wordに移動
+    c->high   &= (1 << (8-shift)) - 1; // highの上位shiftbitをクリア
+    c->high   <<= shift; // high = high * 2^shift
+    c->range   <<= shift;
+    bits       += shift; // (default: -16)
+
+    if(shift >0) printf("shift=%d, insert=0x%x after code_word=0x%x\n", shift, insert, c->code_word);
+
+    if(bits >= 0 && c->buffer < c->end) { // buffer is not empty
+        printf("save");
+        bytestream_put_be16(&c->buffer, c->code_word);
+        bits -= 16;
+    }
+    c->bits = bits; // store the number of bits left
+}
 
 // update prob for encoding
 // static av_always_inline unsigned int vpx_rac_update_prob(VPXRangeEncoder *c, int bit)
@@ -201,30 +209,23 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
 //     }
 // }
 
-static av_always_inline void vpx_rac_set(VPXRangeEncoder *c, int prob, int bit)
+static av_always_inline void vpx_rac_put_prob(VPXRangeEncoder *c, int bit, int prob)
 {
-    unsigned low = 1 + (((c->high - 1) * prob) >> 8);
+    printf("high=%d range=%d -%d", c->high, c->range, bit);
+    unsigned int low = c->high - c->range;
+    unsigned int range = 1 + (((c->high - 1) * prob) >> 8);
+
     if(bit) {
-        c->high = low;
+        low = range;
+        c->range -= range;
     } else {
-        c->range -= low;
+        c->high = range;
+        c->range = range;
     }
 
-    // wip
+    printf("-> high=%d low=%d range=%d\n", c->high, low, c->range);
 
-    unsigned long code_word = vpx_rac_renorm(c);
-    unsigned low_shift = low << 16;
-    printf("low=%d low_shift=0x%x\n", low, low_shift);
-    if (code_word >= low_shift) {
-        printf("code_word >= low_shift !!\n");
-        c->high     -= low;
-        c->code_word = code_word - low_shift;
-        return 1;
-    }
-
-    c->high = low;
-    c->code_word = code_word;
-    return 0;
+    vpx_rac_renorm_enc(c);
 }
 
 #endif /* AVCODEC_VPX_RAC_H */
