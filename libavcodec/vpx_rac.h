@@ -43,6 +43,7 @@ typedef struct VPXRangeCoder {
 } VPXRangeCoder;
 
 typedef struct VPXRangeEncoder {
+    int high;
     int range;
 
     int bits;
@@ -185,35 +186,45 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
 // }
 
 // update prob for encoding
-static av_always_inline unsigned int vpx_rac_update_prob(VPXRangeEncoder *c, int bit)
-{
-    if (bit) {
-        c->c0 += 1;
-    } else {
-        c->c1 += 1;
-    }
-
-    // when the number of encoded bits becomes large, halve the number.
-    if (c->c0 + c->c1 > 0xFFFF) {
-        c->c0 = (c->c0 >> 1) | 1;
-        c->c1 = (c->c1 >> 1) | 1;
-    }
-}
-
-// static av_always_inline void vpx_rac_set(VPXRangeEncoder *c, int bit)
+// static av_always_inline unsigned int vpx_rac_update_prob(VPXRangeEncoder *c, int bit)
 // {
-//     /* equiprobable */
-//     int low = (c->high + 1) >> 1;
-//     unsigned int low_shift = low << 16;
-
 //     if (bit) {
-//         c->high   -= low;
-//         c->code_word -= low_shift;
+//         c->c0 += 1;
 //     } else {
-//         c->high = low;
+//         c->c1 += 1;
 //     }
 
-//     vpx_rac_update(c, bit);
+//     // when the number of encoded bits becomes large, halve the number.
+//     if (c->c0 + c->c1 > 0xFFFF) {
+//         c->c0 = (c->c0 >> 1) | 1;
+//         c->c1 = (c->c1 >> 1) | 1;
+//     }
 // }
+
+static av_always_inline void vpx_rac_set(VPXRangeEncoder *c, int prob, int bit)
+{
+    unsigned low = 1 + (((c->high - 1) * prob) >> 8);
+    if(bit) {
+        c->high = low;
+    } else {
+        c->range -= low;
+    }
+
+    // wip
+
+    unsigned long code_word = vpx_rac_renorm(c);
+    unsigned low_shift = low << 16;
+    printf("low=%d low_shift=0x%x\n", low, low_shift);
+    if (code_word >= low_shift) {
+        printf("code_word >= low_shift !!\n");
+        c->high     -= low;
+        c->code_word = code_word - low_shift;
+        return 1;
+    }
+
+    c->high = low;
+    c->code_word = code_word;
+    return 0;
+}
 
 #endif /* AVCODEC_VPX_RAC_H */
