@@ -4,7 +4,6 @@
 #include <stdlib.h>
 
 int main() {
-  //uint8_t buffer[] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 };
   uint8_t buffer[] = { 0x11, 0x22, 0xaa, 0x55 };
   int buffer_size = sizeof(buffer);
 
@@ -25,8 +24,6 @@ int main() {
           count = 0;
           encoded_char = 0;
       }
-
-      //printf("\n");
   }
 
   if (count > 0) {

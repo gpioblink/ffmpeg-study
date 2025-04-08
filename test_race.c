@@ -12,8 +12,9 @@ int main() {
 
   VPXRangeEncoder coder;
   ff_vpx_init_range_encoder(&coder, buffer, buffer_size);
+  printf("[ high, range]   e(lo,bo)    [ high, range] (norm info)\n");
 
-  // inputがなくなるまで1ビットずつエンコード
+  // encode one bit at a time until there are no more inputs.
   for (int i = 0; i < input_size; i++) {;
       printf("Encoding byte: 0x%x\n", input[i]);
       vpx_rac_put_prob(&coder, (input[i] >> 7) & 1, 204);
@@ -26,7 +27,7 @@ int main() {
       vpx_rac_put_prob(&coder, (input[i] >> 0) & 1, 204);
   }
 
-  // bufferを出力
+  // output buffer
   printf("Encoded buffer: ");
   for (int i = 0; i < buffer_size; i++) {
       printf("%02x ", buffer[i]);

@@ -1,5 +1,19 @@
+# Test Implementation for range encoder
+
+## test decode
+
+Description: [how-to-decode.md](./how-to-decode.md)
+
 ```
 gcc -o test_rac ./test_rac.c -I. && ./test_rac && rm test_rac
+```
+
+## test_encode
+
+Description: [how-to-encode.md](./how-to-encode.md)
+
+```
+gcc -o test_race ./test_race.c -I. && ./test_race && rm test_race
 ```
 
 ---

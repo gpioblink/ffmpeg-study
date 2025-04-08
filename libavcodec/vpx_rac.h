@@ -171,83 +171,43 @@ static av_always_inline void vpx_rac_renorm_enc(VPXRangeEncoder *c)
     //int shift = ff_vpx_norm_shift[c->high < c->range ? c->high : c->range];
 
     int shift = ff_vpx_norm_shift[c->range & 0xFF];
-
     int bits = c->bits;
-
     int insert = c->high >> 8-shift;
 
-    //c->code_word = (c->code_word << shift) + insert; // highの上位shiftbitをcode_wordに移動
+    c->high   &= (1 << (8-shift)) - 1;
+    c->high   <<= shift;
 
-    //if(c->high & (1 << (8-shift)) - 1 == 0) 
-    c->high   &= (1 << (8-shift)) - 1; // highの上位shiftbitをクリア
-    c->high   <<= shift; // high = high * 2^shift
-
-    c->range   &= (1 << (8-shift)) - 1; // rangeの上位shiftbitをクリア
+    c->range   &= (1 << (8-shift)) - 1;
     c->range   <<= shift;
 
-    bits       += shift; // (default: -16)
+    bits       += shift;
 
-    if(shift >0) printf("shift=%d, insert=0x%x, bits=%d\n", shift, insert, bits);
-
-    if(bits >= 0 && c->buffer < c->end) { // buffer is not empty
-        printf("be16 saved! high(16)=0x%x\n", c->high >> 16);
+    if(bits >= 0 && c->buffer < c->end) {
+        printf(" put %x(<<%d),", c->high >> 16, bits);
         bytestream_put_be16(&c->buffer, c->high >> 16);
         bits -= 16;
     }
     c->bits = bits; // store the number of bits left
+
+    if(shift > 0) printf(" shift %d bits (data 0x%x, next %d bits) ", shift, insert, bits);
+    printf("\n");
 }
-
-// update prob for encoding
-// static av_always_inline unsigned int vpx_rac_update_prob(VPXRangeEncoder *c, int bit)
-// {
-//     if (bit) {
-//         c->c0 += 1;
-//     } else {
-//         c->c1 += 1;
-//     }
-
-//     // when the number of encoded bits becomes large, halve the number.
-//     if (c->c0 + c->c1 > 0xFFFF) {
-//         c->c0 = (c->c0 >> 1) | 1;
-//         c->c1 = (c->c1 >> 1) | 1;
-//     }
-// }
 
 static av_always_inline void vpx_rac_put_prob(VPXRangeEncoder *c, int bit, int prob)
 {
-    //printf("high=%d range=%d [%d", c->high, c->range, bit);
-
     unsigned int low = c->high - c->range;
-    unsigned int range = 1 + (((c->high - 1) * prob) >> 8);
+    unsigned int bound = 1 + (((c->high - 1) * prob) >> 8);
 
+    printf("[%5x,%6x] - %d(%2x,%2x) -> ", c->high, c->range, bit, low, bound);
     if(bit) {
-        low = range;
-
-        //c->high     -= low;
-        //c->code_word = code_word - low_shift;
+        c->range = c->high - bound;
     } else {
-        c->high = range;
+        c->high = bound;
+        c->range = bound - low;
     }
-    c->range = c->high - low;
-
-    //printf("] high=%d[0x%x] low=%d[0x%x] range=%d[0x%x]\n", c->high, c->high, low, low, c->range, c->range);
+    printf("[%5x,%6x]", c->high, c -> range);
 
     vpx_rac_renorm_enc(c);
-
-    // unsigned long code_word = vpx_rac_renorm(c);
-    // unsigned low = 1 + (((c->high - 1) * prob) >> 8);
-    // unsigned low_shift = low << 16;
-    // printf("low=%d low_shift=0x%x\n", low, low_shift);
-    // if (code_word >= low_shift) {
-    //     printf("code_word >= low_shift !!\n");
-    //     c->high     -= low;
-    //     c->code_word = code_word - low_shift;
-    //     return 1;
-    // }
-
-    // c->high = low;
-    // c->code_word = code_word;
-    // return 0;
 }
 
 #endif /* AVCODEC_VPX_RAC_H */
