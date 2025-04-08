@@ -61,7 +61,6 @@ int ff_vpx_init_range_encoder(VPXRangeEncoder *c, uint8_t *buf, int buf_size)
     c->end = buf + buf_size;
     if (buf_size < 1)
         return AVERROR_INVALIDDATA;
-    c->code_word = 0;
     c->c0 = 0;
     c->c1 = 0;
     return 0;

@@ -49,7 +49,6 @@ typedef struct VPXRangeEncoder {
     int bits;
     uint8_t *buffer;
     uint8_t *end;
-    unsigned int code_word;
 
     int c0;
     int c1;
@@ -68,14 +67,6 @@ static av_always_inline int dump_buffer(VPXRangeCoder *c)
     return 0;
 }
 
-static av_always_inline int print_vpx_range_coder(VPXRangeCoder *c, char *text)
-{
-    printf("%s: high=%d bits=%d code_word=0x%x\n",
-           text, c->high, c->bits, c->code_word);
-    dump_buffer(c);
-    return 0;
-}
-
 /**
  * returns 1 if the end of the stream has been reached, 0 otherwise.
  */
@@ -88,22 +79,24 @@ static av_always_inline int vpx_rac_is_end(VPXRangeCoder *c)
 
 static av_always_inline unsigned int vpx_rac_renorm(VPXRangeCoder *c)
 {
-    print_vpx_range_coder(c, "renorm");
     int shift = ff_vpx_norm_shift[c->high];
     int bits = c->bits;
     unsigned int code_word = c->code_word;
 
-    if(shift >0) printf("shift=%d, before code_word=0x%x\n", shift, code_word);
     c->high   <<= shift; // high = high * 2^shift
     code_word <<= shift; // code_word = code_word * 2^shift
     bits       += shift; // (default: -16)
-    if(shift >0) printf("shift=%d, after  code_word=0x%x\n", shift, code_word);
     if(bits >= 0 && c->buffer < c->end) { // buffer is not empty
-        code_word |= bytestream_get_be16(&c->buffer) << bits; // code_word = code_word + (buffer << bits)
+        unsigned int data = bytestream_get_be16(&c->buffer);
+        printf(" add %x(<<%d),", data,bits);
+        code_word |= data << bits; // code_word = code_word + (buffer << bits)
         bits -= 16;
     }
     c->bits = bits; // store the number of bits left
-    print_vpx_range_coder(c, "renend");
+
+    if(shift > 0) printf(" shift %d bits (next %d bits) ", shift, bits);
+    printf("\n");
+
     return code_word; // return the new code_word (internal state of the range coder)
 }
 
@@ -136,16 +129,19 @@ static av_always_inline int vpx_rac_get_prob_branchy(VPXRangeCoder *c, int prob)
     unsigned long code_word = vpx_rac_renorm(c);
     unsigned low = 1 + (((c->high - 1) * prob) >> 8);
     unsigned low_shift = low << 16;
-    printf("low=%d low_shift=0x%x\n", low, low_shift);
+    printf("[%6lx,%5x] - (%2x%s%2x)%d -> ", code_word, c->high, c->high >>16, code_word >= low_shift ? ">=":"< ", low, code_word >= low_shift);
     if (code_word >= low_shift) {
-        printf("code_word >= low_shift !!\n");
         c->high     -= low;
         c->code_word = code_word - low_shift;
+        printf("[%6x,%5x]", c->code_word, c->high);
+        //printf("code_word >= low_shift !! high=%d(0x%x)\n", c->high, c->high);
         return 1;
     }
 
     c->high = low;
     c->code_word = code_word;
+    printf("[%6x,%5x]", c->code_word, c->high);
+
     return 0;
 }
 #endif
@@ -157,7 +153,7 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
     int low = (c->high + 1) >> 1;
     unsigned int low_shift = low << 16;
     int bit = code_word >= low_shift;
-    printf("code_word=0x%x low=%d low_shift=0x%x bit=%d\n", code_word, low, low_shift, bit);
+    printf("code_word=0x%x low=%d(0x%x) low_shift=0x%x bit=%d\n", code_word, low, low, low_shift, bit);
     if (bit) {
         c->high   -= low;
         code_word -= low_shift;
@@ -166,19 +162,23 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
     }
 
     c->code_word = code_word;
-    print_vpx_range_coder(c, "rac_get end");
     return bit;
 }
 
 static av_always_inline void vpx_rac_renorm_enc(VPXRangeEncoder *c)
 {
-    int shift = ff_vpx_norm_shift[c->range];
+    // highかrangeのいずれか値が大きい方をshiftに使う
+    //int shift = ff_vpx_norm_shift[c->high < c->range ? c->high : c->range];
+
+    int shift = ff_vpx_norm_shift[c->range & 0xFF];
+
     int bits = c->bits;
 
     int insert = c->high >> 8-shift;
 
-    c->code_word = (c->code_word << shift) + insert; // highの上位shiftbitをcode_wordに移動
+    //c->code_word = (c->code_word << shift) + insert; // highの上位shiftbitをcode_wordに移動
 
+    //if(c->high & (1 << (8-shift)) - 1 == 0) 
     c->high   &= (1 << (8-shift)) - 1; // highの上位shiftbitをクリア
     c->high   <<= shift; // high = high * 2^shift
 
@@ -187,11 +187,11 @@ static av_always_inline void vpx_rac_renorm_enc(VPXRangeEncoder *c)
 
     bits       += shift; // (default: -16)
 
-    if(shift >0) printf("shift=%d, insert=0x%x after code_word=0x%x bits=%d\n", shift, insert, c->code_word, bits);
+    if(shift >0) printf("shift=%d, insert=0x%x, bits=%d\n", shift, insert, bits);
 
     if(bits >= 0 && c->buffer < c->end) { // buffer is not empty
-        printf("be16 saved!\n");
-        bytestream_put_be16(&c->buffer, c->code_word);
+        printf("be16 saved! high(16)=0x%x\n", c->high >> 16);
+        bytestream_put_be16(&c->buffer, c->high >> 16);
         bits -= 16;
     }
     c->bits = bits; // store the number of bits left
@@ -215,21 +215,39 @@ static av_always_inline void vpx_rac_renorm_enc(VPXRangeEncoder *c)
 
 static av_always_inline void vpx_rac_put_prob(VPXRangeEncoder *c, int bit, int prob)
 {
-    printf("high=%d range=%d [%d", c->high, c->range, bit);
+    //printf("high=%d range=%d [%d", c->high, c->range, bit);
 
     unsigned int low = c->high - c->range;
     unsigned int range = 1 + (((c->high - 1) * prob) >> 8);
 
     if(bit) {
         low = range;
+
+        //c->high     -= low;
+        //c->code_word = code_word - low_shift;
     } else {
         c->high = range;
     }
     c->range = c->high - low;
 
-    printf("] high=%d low=%d range=%d\n", c->high, low, c->range);
+    //printf("] high=%d[0x%x] low=%d[0x%x] range=%d[0x%x]\n", c->high, c->high, low, low, c->range, c->range);
 
     vpx_rac_renorm_enc(c);
+
+    // unsigned long code_word = vpx_rac_renorm(c);
+    // unsigned low = 1 + (((c->high - 1) * prob) >> 8);
+    // unsigned low_shift = low << 16;
+    // printf("low=%d low_shift=0x%x\n", low, low_shift);
+    // if (code_word >= low_shift) {
+    //     printf("code_word >= low_shift !!\n");
+    //     c->high     -= low;
+    //     c->code_word = code_word - low_shift;
+    //     return 1;
+    // }
+
+    // c->high = low;
+    // c->code_word = code_word;
+    // return 0;
 }
 
 #endif /* AVCODEC_VPX_RAC_H */
