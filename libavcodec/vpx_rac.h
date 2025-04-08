@@ -134,7 +134,6 @@ static av_always_inline int vpx_rac_get_prob_branchy(VPXRangeCoder *c, int prob)
         c->high     -= low;
         c->code_word = code_word - low_shift;
         printf("[%6x,%5x]", c->code_word, c->high);
-        //printf("code_word >= low_shift !! high=%d(0x%x)\n", c->high, c->high);
         return 1;
     }
 
@@ -167,9 +166,6 @@ static av_always_inline int vpx_rac_get(VPXRangeCoder *c)
 
 static av_always_inline void vpx_rac_renorm_enc(VPXRangeEncoder *c)
 {
-    // highかrangeのいずれか値が大きい方をshiftに使う
-    //int shift = ff_vpx_norm_shift[c->high < c->range ? c->high : c->range];
-
     int shift = ff_vpx_norm_shift[c->range & 0xFF];
     int bits = c->bits;
     int insert = c->high >> 8-shift;
