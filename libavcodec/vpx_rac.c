@@ -37,7 +37,7 @@ const uint8_t ff_vpx_norm_shift[256]= {
  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-};
+}; // 0: 8, 1:7, 2-3: 6, 4-7: 5, 8-15: 4, 16-31: 3, 32-63: 2, 64-127: 1, 128-255: 0
 
 int ff_vpx_init_range_decoder(VPXRangeCoder *c, const uint8_t *buf, int buf_size)
 {
@@ -49,5 +49,19 @@ int ff_vpx_init_range_decoder(VPXRangeCoder *c, const uint8_t *buf, int buf_size
     if (buf_size < 1)
         return AVERROR_INVALIDDATA;
     c->code_word = bytestream_get_be24(&c->buffer);
+    return 0;
+}
+
+int ff_vpx_init_range_encoder(VPXRangeEncoder *c, uint8_t *buf, int buf_size)
+{
+    c->high = 255;
+    c->range = 255;
+    c->bits = -16;
+    c->buffer = buf;
+    c->end = buf + buf_size;
+    if (buf_size < 1)
+        return AVERROR_INVALIDDATA;
+    c->c0 = 0;
+    c->c1 = 0;
     return 0;
 }

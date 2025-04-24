@@ -1,0 +1,38 @@
+#include "libavcodec/vpx_rac.h"
+#include "libavcodec/vpx_rac.c"
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+  uint8_t input[] = { 0x00, 0x10, 0x20, 0x0a, 0x10, 0x04, 0x88, 0x21 };
+  int input_size = sizeof(input);
+
+  uint8_t buffer[16];
+  int buffer_size = sizeof(buffer);
+
+  VPXRangeEncoder coder;
+  ff_vpx_init_range_encoder(&coder, buffer, buffer_size);
+  printf("[ high, range]   e(lo,bo)    [ high, range] (norm info)\n");
+
+  // encode one bit at a time until there are no more inputs.
+  for (int i = 0; i < input_size; i++) {;
+      printf("Encoding byte: 0x%x\n", input[i]);
+      vpx_rac_put_prob(&coder, (input[i] >> 7) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 6) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 5) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 4) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 3) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 2) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 1) & 1, 204);
+      vpx_rac_put_prob(&coder, (input[i] >> 0) & 1, 204);
+  }
+
+  // output buffer
+  printf("Encoded buffer: ");
+  for (int i = 0; i < buffer_size; i++) {
+      printf("%02x ", buffer[i]);
+  }
+  printf("\n");
+
+  return 0;
+}
